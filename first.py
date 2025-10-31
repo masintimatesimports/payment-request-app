@@ -618,6 +618,13 @@ def merge_pdfs(pdf1_bytes, pdf2_bytes):
 def main():
     st.set_page_config(page_title="Payment Request Form Generator", layout="wide")
     
+    # Initialize session state for extracted data if not exists
+    if 'extracted_data' not in st.session_state:
+        st.session_state.extracted_data = {}
+    if 'cusdec_file' not in st.session_state:
+        st.session_state.cusdec_file = None
+    
+    
     st.title("📄 Payment Request Form Generator")
     
     # Create tabs
@@ -639,6 +646,9 @@ def main():
                 extracted_data = process_cusdec_pdf(cusdec_file)
                 st.session_state.extracted_data = extracted_data
                 st.success(f"✅ CUSDEC PDF uploaded and data extracted: {cusdec_file.name}")
+                
+                # Force rerun to update form fields
+                # st.rerun()
         
         # Toggle for advanced fields
         st.session_state.show_advanced = st.checkbox("Show All Fields", value=False)
@@ -658,23 +668,33 @@ def main():
                 if extracted_company in company_options:
                     default_company = extracted_company
             
-            company_name = st.selectbox("Company Name *", company_options, index=company_options.index(default_company) if default_company in company_options else 0)
+            company_name = st.selectbox("Company Name *", company_options, 
+                                    index=company_options.index(default_company) if default_company in company_options else 0,
+                                    key="wc_company_name")
             
-            # Invoice Number components
+            # Invoice Number components - FIXED with unique keys
             st.write("Invoice Number *")
             col_inv1, col_inv2, col_inv3 = st.columns(3)
             with col_inv1:
                 # Auto-fill invoice prefix if extracted, otherwise blank
                 default_prefix = st.session_state.extracted_data.get('invoice_prefix', '')
-                invoice_prefix = st.text_input("Prefix *", value=default_prefix, key="inv_prefix")
+                invoice_prefix = st.text_input("Prefix *", 
+                                            value=default_prefix, 
+                                            key="wc_inv_prefix")
+
             with col_inv2:
                 # Auto-fill invoice number if extracted, otherwise blank
                 default_number = st.session_state.extracted_data.get('invoice_number', '')
-                invoice_number = st.text_input("Number *", value=default_number, key="inv_number")
+                invoice_number = st.text_input("Number *", 
+                                            value=default_number, 
+                                            key="wc_inv_number")
+
             with col_inv3:
                 # Auto-fill invoice year if extracted, otherwise blank
                 default_year = st.session_state.extracted_data.get('invoice_year', '')
-                invoice_year = st.text_input("Year *", value=default_year, key="inv_year")
+                invoice_year = st.text_input("Year *", 
+                                            value=default_year, 
+                                            key="wc_inv_year")
             
             # Auto-fill invoice date if extracted, otherwise today's date
             default_invoice_date = datetime.now()
@@ -688,7 +708,7 @@ def main():
                 except:
                     pass
 
-            invoice_date = st.date_input("Invoice Date *", value=default_invoice_date)
+            invoice_date = st.date_input("Invoice Date *", value=default_invoice_date, key="wc_invoice_date")
 
             # Auto-fill PO Number if extracted, otherwise blank
             default_po_number = st.session_state.extracted_data.get('po_number', '')
