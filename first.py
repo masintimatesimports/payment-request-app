@@ -641,26 +641,24 @@ def main():
         auto_process = st.checkbox("Automatically extract data after upload", value=True)
         
         if cusdec_file is not None:
-            # More robust session state check for cloud
+            # DEBUG: Show what's in extracted_data
+            st.write("🔍 DEBUG - Current extracted_data:", st.session_state.extracted_data)
+            
+            # Track if we've processed this file
             current_file_id = f"{cusdec_file.name}_{cusdec_file.size}"
             
-            # Check if we need to reprocess (cloud-safe)
-            file_changed = ('last_processed_file' not in st.session_state or 
-                           st.session_state.last_processed_file != current_file_id)
-            
-            extracted_data_empty = not st.session_state.extracted_data
-            
-            if (file_changed or extracted_data_empty) and auto_process:
-                with st.spinner("Extracting data from CUSDEC PDF..."):
-                    extracted_data = process_cusdec_pdf(cusdec_file)
-                    # Update session state atomically
-                    st.session_state.extracted_data = extracted_data
-                    st.session_state.cusdec_file = cusdec_file
-                    st.session_state.last_processed_file = current_file_id
-                    st.success(f"✅ Data extracted automatically!")
-                    
-                    # Force refresh for cloud environment
-                    st.rerun()
+            if ('last_processed_file' not in st.session_state or 
+                st.session_state.last_processed_file != current_file_id):
+                
+                if auto_process:
+                    with st.spinner("Extracting data from CUSDEC PDF..."):
+                        extracted_data = process_cusdec_pdf(cusdec_file)
+                        st.session_state.extracted_data = extracted_data
+                        st.session_state.cusdec_file = cusdec_file
+                        st.session_state.last_processed_file = current_file_id
+                        st.success(f"✅ Data extracted automatically!")
+                        # DEBUG: Show what was just extracted
+                        st.write("🔍 DEBUG - Freshly extracted data:", extracted_data)
         
         # Rest of your code remains the same...
         
@@ -671,39 +669,37 @@ def main():
         col1, col2 = st.columns(2)
         
         with col1:
-            # Essential fields - always visible
+
             st.subheader("Essential Information")
             company_options = ["", "BODYLINE PVT LTD", "UNICHELA PVT LTD", "MAS CAPITAL PVT LTD"]
-            
-            # Get extracted company or empty string
+
+            # Cloud-safe company selection
             extracted_company = st.session_state.extracted_data.get('company_name', '')
-            # Find index in options, default to 0 if not found
-            company_index = company_options.index(extracted_company) if extracted_company in company_options else 0
-            company_name = st.selectbox("Company Name *", company_options, index=company_index)
-            
-            # Invoice Number components - FIXED with unique keys
+            # Handle both cases: empty string or None
+            if not extracted_company:
+                company_index = 0
+            else:
+                company_index = company_options.index(extracted_company) if extracted_company in company_options else 0
+
+            company_name = st.selectbox("Company Name *", company_options, index=company_index, key="company_select")
+
+            # Invoice Number components - Cloud optimized
             st.write("Invoice Number *")
             col_inv1, col_inv2, col_inv3 = st.columns(3)
             with col_inv1:
-                # Auto-fill invoice prefix if extracted, otherwise blank
-                default_prefix = st.session_state.extracted_data.get('invoice_prefix', '')
-                # To this (more explicit):
                 invoice_prefix = st.text_input("Prefix *", 
-                                            value=st.session_state.extracted_data.get('invoice_prefix', ''),
-                                            key="invoice_prefix_input")
+                                            value=str(st.session_state.extracted_data.get('invoice_prefix', '')),
+                                            key="prefix_input")
+
             with col_inv2:
-                # Auto-fill invoice number if extracted, otherwise blank
-                default_number = st.session_state.extracted_data.get('invoice_number', '')
                 invoice_number = st.text_input("Number *", 
-                                            value=default_number, 
-                                            key="wc_inv_number")
+                                            value=str(st.session_state.extracted_data.get('invoice_number', '')),
+                                            key="number_input")
 
             with col_inv3:
-                # Auto-fill invoice year if extracted, otherwise blank
-                default_year = st.session_state.extracted_data.get('invoice_year', '')
                 invoice_year = st.text_input("Year *", 
-                                            value=default_year, 
-                                            key="wc_inv_year")
+                                            value=str(st.session_state.extracted_data.get('invoice_year', '')),
+                                            key="year_input")
             
             # Auto-fill invoice date if extracted, otherwise today's date
             default_invoice_date = datetime.now()
@@ -713,7 +709,7 @@ def main():
                     date_str = st.session_state.extracted_data['invoice_date']
                     day, month, year = map(int, date_str.split('/'))
                     default_invoice_date = datetime(year, month, day)
-                    st.success(f"✅ Auto-filled Invoice Date: {date_str}")
+                    # st.success(f"✅ Auto-filled Invoice Date: {date_str}")
                 except:
                     pass
 
@@ -1263,5 +1259,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
