@@ -661,8 +661,17 @@ def main():
                         st.write("🔍 DEBUG - Freshly extracted data:", extracted_data)
                         st.rerun()
         
-        # Rest of your code remains the same...
-        
+        # 🔥 CRITICAL FIX FOR STREAMLIT CLOUD 🔥
+        # Initialize form fields with extracted data BEFORE they render
+        if st.session_state.extracted_data:
+            # Force update the form field values in session state
+            for key in ['invoice_prefix', 'invoice_number', 'invoice_year']:
+                if key in st.session_state.extracted_data:
+                    # Set the form field values in session state
+                    field_value = str(st.session_state.extracted_data[key])
+                    if f"{key}_input" not in st.session_state:
+                        st.session_state[f"{key}_input"] = field_value  
+                        
         # Toggle for advanced fields
         st.session_state.show_advanced = st.checkbox("Show All Fields", value=False)
         
@@ -1260,5 +1269,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
