@@ -641,19 +641,26 @@ def main():
         auto_process = st.checkbox("Automatically extract data after upload", value=True)
         
         if cusdec_file is not None:
-            # Track if we've processed this file
+            # More robust session state check for cloud
             current_file_id = f"{cusdec_file.name}_{cusdec_file.size}"
             
-            if ('last_processed_file' not in st.session_state or 
-                st.session_state.last_processed_file != current_file_id):
-                
-                if auto_process:
-                    with st.spinner("Extracting data from CUSDEC PDF..."):
-                        extracted_data = process_cusdec_pdf(cusdec_file)
-                        st.session_state.extracted_data = extracted_data
-                        st.session_state.cusdec_file = cusdec_file
-                        st.session_state.last_processed_file = current_file_id
-                        st.success(f"✅ Data extracted automatically!")
+            # Check if we need to reprocess (cloud-safe)
+            file_changed = ('last_processed_file' not in st.session_state or 
+                           st.session_state.last_processed_file != current_file_id)
+            
+            extracted_data_empty = not st.session_state.extracted_data
+            
+            if (file_changed or extracted_data_empty) and auto_process:
+                with st.spinner("Extracting data from CUSDEC PDF..."):
+                    extracted_data = process_cusdec_pdf(cusdec_file)
+                    # Update session state atomically
+                    st.session_state.extracted_data = extracted_data
+                    st.session_state.cusdec_file = cusdec_file
+                    st.session_state.last_processed_file = current_file_id
+                    st.success(f"✅ Data extracted automatically!")
+                    
+                    # Force refresh for cloud environment
+                    st.rerun()
         
         # Rest of your code remains the same...
         
@@ -1256,4 +1263,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
