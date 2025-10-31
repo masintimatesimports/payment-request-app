@@ -668,16 +668,11 @@ def main():
             st.subheader("Essential Information")
             company_options = ["", "BODYLINE PVT LTD", "UNICHELA PVT LTD", "MAS CAPITAL PVT LTD"]
             
-            # Auto-fill company name if extracted, otherwise blank
-            default_company = ""
-            if 'company_name' in st.session_state.extracted_data:
-                extracted_company = st.session_state.extracted_data['company_name']
-                if extracted_company in company_options:
-                    default_company = extracted_company
-            
-            company_name = st.selectbox("Company Name *", company_options, 
-                                    index=company_options.index(default_company) if default_company in company_options else 0,
-                                    key="wc_company_name")
+            # Get extracted company or empty string
+            extracted_company = st.session_state.extracted_data.get('company_name', '')
+            # Find index in options, default to 0 if not found
+            company_index = company_options.index(extracted_company) if extracted_company in company_options else 0
+            company_name = st.selectbox("Company Name *", company_options, index=company_index)
             
             # Invoice Number components - FIXED with unique keys
             st.write("Invoice Number *")
@@ -685,10 +680,10 @@ def main():
             with col_inv1:
                 # Auto-fill invoice prefix if extracted, otherwise blank
                 default_prefix = st.session_state.extracted_data.get('invoice_prefix', '')
+                # To this (more explicit):
                 invoice_prefix = st.text_input("Prefix *", 
-                                            value=default_prefix, 
-                                            key="wc_inv_prefix")
-
+                                            value=st.session_state.extracted_data.get('invoice_prefix', ''),
+                                            key="invoice_prefix_input")
             with col_inv2:
                 # Auto-fill invoice number if extracted, otherwise blank
                 default_number = st.session_state.extracted_data.get('invoice_number', '')
@@ -1261,5 +1256,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
