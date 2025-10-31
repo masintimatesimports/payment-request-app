@@ -628,7 +628,7 @@ def main():
     st.title("📄 Payment Request Form Generator")
     
     # Create tabs
-    tab1, tab2 = st.tabs(["WC Creation", "PayReq Creation"])
+    tab1, tab2, tab3 = st.tabs(["WC Creation", "PayReq Creation", "Help & SOP"])
 
     with tab1:
         st.write("Fill in the details below to generate a Payment Request Form PDF")
@@ -681,11 +681,17 @@ def main():
         with col1:
 
             st.subheader("Essential Information")
-
             company_options = ["", "BODYLINE PVT LTD", "UNICHELA PVT LTD", "MAS CAPITAL PVT LTD"]
-            company_name_value = st.session_state.extracted_data.get('company_name', '')
-            company_index = company_options.index(company_name_value) if company_name_value in company_options else 0
-            company_name = st.selectbox("Company Name *", company_options, index=company_index)
+
+            # Cloud-safe company selection
+            extracted_company = st.session_state.extracted_data.get('company_name', '')
+            # Handle both cases: empty string or None
+            if not extracted_company:
+                company_index = 0
+            else:
+                company_index = company_options.index(extracted_company) if extracted_company in company_options else 0
+
+            company_name = st.selectbox("Company Name *", company_options, index=company_index, key="company_select")
 
             # Invoice Number components - Cloud optimized
 
@@ -1258,12 +1264,229 @@ def main():
                     else:
                         st.warning("No CUSDEC PDFs uploaded for merging")
 
-
+    with tab3:
+        st.header("📚 Help & Standard Operating Procedure")
+        
+        st.subheader("🎯 Overview")
+        st.write("""
+        This application automates the creation of Payment Request Forms and PayReq Excel files 
+        by extracting data from CUSDEC PDF documents. It supports two main workflows:
+        """)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.info("**WC Creation**\n\n- Generate Payment Request Forms\n- Auto-fill from CUSDEC PDFs\n- Merge with source documents")
+        
+        with col2:
+            st.info("**PayReq Creation**\n\n- Create Excel payment requisitions\n- Batch process multiple CUSDECs\n- Generate combined PDFs")
+        
+        st.subheader("📋 Step-by-Step Instructions")
+        
+        with st.expander("🔧 WC Creation Workflow", expanded=True):
+            st.markdown("""
+            ### Step 1: Upload CUSDEC PDF
+            - Click **'Upload CUSDEC PDF for auto-fill and merging'**
+            - Ensure **'Automatically extract data after upload'** is checked
+            - Wait for the green success messages showing extracted data
+            
+            ### Step 2: Review Auto-filled Data
+            - **Company Name**: Automatically detected from Consignee section
+            - **Invoice Number**: Extracted from Customs Reference Number (Format: S 52194 30/09/2025)
+            - **Financial Data**: Gross Value and VAT Amount extracted from tax tables
+            
+            ### Step 3: Complete Required Fields
+            - **GL Account**: Select from dropdown (72022181 for duty, 10016000 for other)
+            - **Cost Center**: Enter manually based on company
+            - **PO Number**: Optional field for purchase orders
+            
+            ### Step 4: Generate PDFs
+            - **Download Payment Request Only**: Creates standalone PRF PDF
+            - **Download Merged PDF with CUSDEC**: Combines PRF with source document
+            
+            ### Required Fields:
+            - Company Name ✅
+            - Invoice Number (Prefix, Number, Year) ✅
+            - Gross Value (> 0) ✅
+            - GL Account ✅
+            """)
+        
+        with st.expander("📊 PayReq Creation Workflow"):
+            st.markdown("""
+            ### Step 1: Upload Template (Optional)
+            - Upload existing Excel template if available
+            
+            ### Step 2: Enter Company Details
+            - Select **COMPANY** from dropdown
+            - Vendor details pre-filled for Customs Department
+            - Set payment mode and currency
+            
+            ### Step 3: Upload CUSDEC PDFs
+            - Upload single or multiple CUSDEC files
+            - System automatically extracts and validates VAT amounts
+            - Only processes documents where Gross Value = VAT Amount
+            
+            ### Step 4: Review Data Table
+            - Edit extracted data if needed
+            - Add manual entries using **'Add Manual Entry'**
+            - Clear all data with **'Clear All Data'** if needed
+            
+            ### Step 5: Generate Files
+            - **Excel Only**: Creates PayReq Excel file
+            - **With Merged PDFs**: Creates Excel + Combined CUSDEC PDF
+            """)
+        
+        with st.expander("🔍 Data Extraction Details"):
+            st.markdown("""
+            ### What Gets Extracted from CUSDEC:
+            
+            **From Consignee Section:**
+            - Company Name (MAS CAPITAL PVT LTD, BODYLINE PVT LTD, UNICHELA PVT LTD)
+            
+            **From Customs Reference Number:**
+            - Office Code (CBBI1, CBBI2, etc.)
+            - Invoice Prefix (S, C, etc.)
+            - Invoice Number (5-6 digits)
+            - Invoice Year (4 digits)
+            - Invoice Date (DD/MM/YYYY)
+            
+            **From Financial Sections:**
+            - Gross Value (from Total Declaration)
+            - VAT Amount (from Tax Table or Summary of Taxes)
+            
+            ### Extraction Logic:
+            - Looks for specific labels like "Consignee", "Customs Reference Number"
+            - Expands search area to capture adjacent data cages
+            - Preserves text order and formatting
+            - Validates VAT amounts with trailing flags
+            """)
+        
+        with st.expander("🚨 Troubleshooting"):
+            st.markdown("""
+            ### Common Issues & Solutions:
+            
+            **❌ 'Please fill in all required fields' error**
+            - Ensure CUSDEC uploaded and processed (green success messages)
+            - Check that all required fields are populated
+            - Verify Gross Value is greater than 0
+            
+            **❌ Form fields not auto-filled**
+            - Wait for extraction to complete (spinner should disappear)
+            - Check browser console for errors
+            - Try uploading the CUSDEC again
+            
+            **❌ 'Rejected: Gross Value ≠ VAT Amount'**
+            - Only VAT claims are processed in PayReq tab
+            - Ensure CUSDEC contains valid VAT amounts
+            - Use WC Creation tab for non-VAT payments
+            
+            **❌ PDF generation errors**
+            - Check all required fields are filled
+            - Ensure no special characters in fields
+            - Try generating without CUSDEC merge first
+            
+            **🔄 Session State Issues**
+            - Refresh browser if forms behave unexpectedly
+            - Clear browser cache if persistent issues occur
+            - Re-upload CUSDEC files if extraction fails
+            """)
+        
+        with st.expander("🏷️ Field Reference Guide"):
+            col_ref1, col_ref2 = st.columns(2)
+            
+            with col_ref1:
+                st.markdown("""
+                **Company Codes:**
+                - BODYLINE PVT LTD → BPL / B050
+                - UNICHELA PVT LTD → UPL / A050  
+                - MAS CAPITAL PVT LTD → MCPL / MCAP
+                
+                **GL Accounts:**
+                - 72022181 - Customs Duty
+                - 10016000 - Other Charges
+                - 17003030 - VAT Claims
+                
+                **Cost Centers:**
+                - BODYLINE: B051ADMN01
+                - UNICHELA: A051ADMN01
+                - MAS CAPITAL: MCAP051ADMN01
+                
+                **Functional Areas:**
+                - Z019 - General
+                - Z016 - VAT Processing
+                """)
+                
+            with col_ref2:
+                st.markdown("""
+                **Vendor Information:**
+                - Code: 0000400554
+                - Name: Director General of Customs
+                - Email: chamithwi@masholdings.com
+                
+                **Payment Methods:**
+                - S - Standard Payment
+                - C - Cheque Payment  
+                - T - Transfer
+                
+                **Office Codes:**
+                - CBBI1 - Colombo BOI Imports
+                - CBBI2 - Colombo BOI Imports (Air)
+                - Other codes auto-detected
+                
+                **Invoice Format:**
+                - Prefix (S) + Number (52194) + Year (2025)
+                - Example: S 52194 2025
+                """)
+        
+        with st.expander("📞 Support & Contact"):
+            st.markdown("""
+            ### Getting Help
+            
+            **For Technical Issues:**
+            - Check the troubleshooting section above
+            - Ensure you're using supported CUSDEC formats
+            - Verify all extracted data looks correct
+            
+            **For Process Questions:**
+            - Refer to company accounting procedures
+            - Consult with finance department for GL account guidance
+            - Review CUSDEC documentation for field meanings
+            
+            **System Requirements:**
+            - Modern web browser (Chrome, Firefox, Safari, Edge)
+            - PDF files in standard CUSDEC format
+            - Stable internet connection
+            
+            **Data Privacy:**
+            - All processing happens in your browser
+            - Files are not stored on servers
+            - Temporary files deleted after processing
+            """)
+        
+        st.subheader("💡 Tips & Best Practices")
+        
+        tip_col1, tip_col2 = st.columns(2)
+        
+        with tip_col1:
+            st.success("""
+            **✅ Do:**
+            - Verify extracted data matches CUSDEC
+            - Check calculated GL Amounts
+            - Use 'Show All Fields' for advanced options
+            - Save generated files immediately
+            """)
+        
+        with tip_col2:
+            st.warning("""
+            **❌ Don't:**
+            - Upload corrupted PDF files
+            - Close browser during processing
+            - Use back/forward navigation
+            - Process non-CUSDEC documents
+            """)
 
 if __name__ == "__main__":
     main()
-
-
 
 
 
