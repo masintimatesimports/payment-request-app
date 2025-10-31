@@ -694,22 +694,21 @@ def main():
             company_name = st.selectbox("Company Name *", company_options, index=company_index, key="company_select")
 
             # Invoice Number components - Cloud optimized
+
             st.write("Invoice Number *")
             col_inv1, col_inv2, col_inv3 = st.columns(3)
+            
             with col_inv1:
                 invoice_prefix = st.text_input("Prefix *", 
-                                            value=str(st.session_state.extracted_data.get('invoice_prefix', '')),
-                                            key="prefix_input")
-
+                                            value=st.session_state.extracted_data.get('invoice_prefix', ''))
+            
             with col_inv2:
                 invoice_number = st.text_input("Number *", 
-                                            value=str(st.session_state.extracted_data.get('invoice_number', '')),
-                                            key="number_input")
-
+                                            value=st.session_state.extracted_data.get('invoice_number', ''))
+            
             with col_inv3:
                 invoice_year = st.text_input("Year *", 
-                                            value=str(st.session_state.extracted_data.get('invoice_year', '')),
-                                            key="year_input")
+                                          value=st.session_state.extracted_data.get('invoice_year', ''))
             
             # Auto-fill invoice date if extracted, otherwise today's date
             default_invoice_date = datetime.now()
@@ -1269,6 +1268,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
