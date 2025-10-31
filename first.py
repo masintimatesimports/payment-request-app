@@ -659,6 +659,7 @@ def main():
                         st.success(f"✅ Data extracted automatically!")
                         # DEBUG: Show what was just extracted
                         st.write("🔍 DEBUG - Freshly extracted data:", extracted_data)
+                        st.rerun()
         
         # Rest of your code remains the same...
         
@@ -1259,4 +1260,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
