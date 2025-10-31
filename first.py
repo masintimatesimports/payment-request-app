@@ -633,22 +633,29 @@ def main():
     with tab1:
         st.write("Fill in the details below to generate a Payment Request Form PDF")
         
-        # CUSDEC PDF Upload for auto-fill and merging
+        # CUSDEC PDF Upload
         st.subheader("📤 Upload CUSDEC PDF")
         cusdec_file = st.file_uploader("Upload CUSDEC PDF for auto-fill and merging", type="pdf", key="cusdec_uploader")
         
+        # Auto-process checkbox
+        auto_process = st.checkbox("Automatically extract data after upload", value=True)
+        
         if cusdec_file is not None:
-            # Store in session state
-            st.session_state.cusdec_file = cusdec_file
+            # Track if we've processed this file
+            current_file_id = f"{cusdec_file.name}_{cusdec_file.size}"
             
-            # Auto-extract data from CUSDEC without button
-            with st.spinner("Extracting data from CUSDEC PDF..."):
-                extracted_data = process_cusdec_pdf(cusdec_file)
-                st.session_state.extracted_data = extracted_data
-                st.success(f"✅ CUSDEC PDF uploaded and data extracted: {cusdec_file.name}")
+            if ('last_processed_file' not in st.session_state or 
+                st.session_state.last_processed_file != current_file_id):
                 
-                # Force rerun to update form fields
-                # st.rerun()
+                if auto_process:
+                    with st.spinner("Extracting data from CUSDEC PDF..."):
+                        extracted_data = process_cusdec_pdf(cusdec_file)
+                        st.session_state.extracted_data = extracted_data
+                        st.session_state.cusdec_file = cusdec_file
+                        st.session_state.last_processed_file = current_file_id
+                        st.success(f"✅ Data extracted automatically!")
+        
+        # Rest of your code remains the same...
         
         # Toggle for advanced fields
         st.session_state.show_advanced = st.checkbox("Show All Fields", value=False)
@@ -1254,4 +1261,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
