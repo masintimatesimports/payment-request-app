@@ -616,7 +616,7 @@ def merge_pdfs(pdf1_bytes, pdf2_bytes):
     return merged_pdf.getvalue()
 
 def main():
-    st.set_page_config(page_title="Payment Request Form Generator", layout="wide")
+    st.set_page_config(page_title="CusDec Payment Request Edition", layout="wide")
     
     # Initialize session state for extracted data if not exists
     if 'extracted_data' not in st.session_state:
@@ -625,7 +625,7 @@ def main():
         st.session_state.cusdec_file = None
     
     
-    st.title("📄 Payment Request Form Generator")
+    st.title("📄 CusDec Payment Request Edition")
     
     # Create tabs
     tab1, tab2, tab3 = st.tabs(["WC Creation", "PayReq Creation", "Help & SOP"])
@@ -680,12 +680,18 @@ def main():
         
         with col1:
 
-            st.subheader("Essential Information")            
-            # SIMPLIFIED Company Name
+            st.subheader("Essential Information")
             company_options = ["", "BODYLINE PVT LTD", "UNICHELA PVT LTD", "MAS CAPITAL PVT LTD"]
-            company_name_value = st.session_state.extracted_data.get('company_name', '')
-            company_index = company_options.index(company_name_value) if company_name_value in company_options else 0
-            company_name = st.selectbox("Company Name *", company_options, index=company_index)
+
+            # Cloud-safe company selection
+            extracted_company = st.session_state.extracted_data.get('company_name', '')
+            # Handle both cases: empty string or None
+            if not extracted_company:
+                company_index = 0
+            else:
+                company_index = company_options.index(extracted_company) if extracted_company in company_options else 0
+
+            company_name = st.selectbox("Company Name *", company_options, index=company_index, key="company_select")
 
             # Invoice Number components - Cloud optimized
 
@@ -1277,6 +1283,33 @@ def main():
         
         st.subheader("📋 Step-by-Step Instructions")
         
+        with st.expander("📋 IMPORTANT: Document Requirements", expanded=True):
+            st.markdown("""
+            ### ✅ Supported Documents:
+            - **Editable PDF CusDec files** (digital/text-based)
+            - Documents with extractable text layers
+            - Standard CusDec format from customs portal
+
+            ### ❌ Unsupported Documents:
+            - **Scanned PDF copies** (image-based)
+            - Photographs of documents
+            - Password-protected PDFs
+            - Low-quality scans
+
+            ### How to Check Your PDF:
+            1. Open the PDF in Adobe Reader
+            2. Try to select text with your cursor
+            3. If text can be selected → **Supported**
+            4. If no text can be selected → **Not Supported**
+
+            ### Getting Editable CusDec:
+            - Download directly from customs portal
+            - Ensure you're getting the digital version, not scanned printouts
+            - Contact customs department for digital copies if needed
+            """)
+
+
+
         with st.expander("🔧 WC Creation Workflow", expanded=True):
             st.markdown("""
             ### Step 1: Upload CUSDEC PDF
@@ -1481,7 +1514,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
