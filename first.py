@@ -684,14 +684,9 @@ def main():
             company_options = ["", "BODYLINE PVT LTD", "UNICHELA PVT LTD", "MAS CAPITAL PVT LTD"]
 
             # Cloud-safe company selection
-            extracted_company = st.session_state.extracted_data.get('company_name', '')
-            # Handle both cases: empty string or None
-            if not extracted_company:
-                company_index = 0
-            else:
-                company_index = company_options.index(extracted_company) if extracted_company in company_options else 0
-
-            company_name = st.selectbox("Company Name *", company_options, index=company_index, key="company_select")
+            company_name_value = st.session_state.extracted_data.get('company_name', '')
+            company_index = company_options.index(company_name_value) if company_name_value in company_options else 0
+            company_name = st.selectbox("Company Name *", company_options, index=company_index)
 
             # Invoice Number components - Cloud optimized
 
@@ -948,7 +943,7 @@ def main():
         st.subheader("PayReq Creation")
         
         # Upload template Excel file
-        st.write("### Step 1: Upload PayReq Template")
+        st.write("### Step 1: Upload PayReq Template(Optional)")
         template_file = st.file_uploader("Upload PayReq Excel Template", type=["xlsx", "xls"])
         
         if template_file:
