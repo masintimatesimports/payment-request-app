@@ -958,10 +958,10 @@ def main():
             company_code_map = {
                 "BODYLINE PVT LTD": "B050",
                 "UNICHELA PVT LTD": "A050", 
-                "MAS CAPITAL PVT LTD": "MCAP"
+                "MAS CAPITAL PVT LTD": "A000"
             }
-            selected_company = st.selectbox("COMPANY", list(company_code_map.keys()), index=1)
-            company_code = company_code_map[selected_company]
+            selected_company = st.selectbox("COMPANY *", [""] + list(company_code_map.keys()), index=0)
+            company_code = company_code_map[selected_company] if selected_company else ""
             
             vendor_code = st.text_input("VENDOR CODE", "0000400554")
             vendor_name = st.text_input("VENDOR NAME", "Director General of Customs")
@@ -985,8 +985,11 @@ def main():
                 'CUSDEC_FILE': []  # Store the uploaded file for reference
             })
         
-        st.write("### Step 3: Upload CUSDEC PDFs and Auto-fill Data")
-        
+        st.write("### Step 3: Upload CUSDEC PDFs in Order")
+        st.info("💡 **Upload Tip**: Add PDFs in the order you want them merged. For Bodyline, upload CUSDEC first then Assessment Notice.")
+
+
+
         # Combined CUSDEC PDF uploader for both auto-fill and merging
         uploaded_cusdecs = st.file_uploader(
             "Upload CUSDEC PDFs (for auto-fill and merging)", 
@@ -995,12 +998,19 @@ def main():
             key="payreq_cusdec_uploader"
         )
         
+        # Add this check before processing CUSDECs
+        if not selected_company:
+            st.error("❌ Please select a COMPANY first before uploading CUSDEC files")
+            st.stop()
+
+
         # Store uploaded files in session state for merging
         if uploaded_cusdecs:
             st.session_state.payreq_cusdec_files = uploaded_cusdecs
  
         # Process each uploaded CUSDEC
-        if uploaded_cusdecs:
+        # Process each uploaded CUSDEC
+        if uploaded_cusdecs and selected_company:
             for i, cusdec_file in enumerate(uploaded_cusdecs):
                 if f"processed_{cusdec_file.name}" not in st.session_state:
                     st.write(f"**Processing {cusdec_file.name}...**")
@@ -1008,6 +1018,12 @@ def main():
                     # Extract data from CUSDEC PDF
                     with st.spinner(f"Extracting data from {cusdec_file.name}..."):
                         extracted_data = process_cusdec_pdf(cusdec_file)
+                        
+                        # Validate company match
+                        extracted_company = extracted_data.get('company_name', '')
+                        if extracted_company.upper() != selected_company.upper():
+                            st.error(f"❌ Rejected {cusdec_file.name}: Extracted company '{extracted_company}' doesn't match selected company '{selected_company}'")
+                            continue
                         
                         # Add to table if extraction successful
                         if any(key in extracted_data for key in ['company_name', 'invoice_number', 'gross_value', 'vat_amount']):
@@ -1200,7 +1216,8 @@ def main():
                             output_df.to_excel(writer, index=False, sheet_name='Payment Requisition')
 
                         excel_data = output.getvalue()
-                        filename = f"PayReq_{company_code}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                        filename = f"PayReq_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+
 
                         st.download_button(
                             label="Download PayReq Excel",
@@ -1245,7 +1262,7 @@ def main():
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                                 )
                             with col_dl2:
-                                pdf_filename = f"Combined_CUSDEC_{company_code}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+                                pdf_filename = f"Combined_CUSDEC_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
                                 st.download_button(
                                     label="Download Combined CUSDEC PDF",
                                     data=combined_pdf_data,
@@ -1509,6 +1526,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
