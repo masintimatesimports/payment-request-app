@@ -9,6 +9,17 @@ from io import BytesIO
 import fitz
 import re
 from typing import Optional, List, Dict, Tuple
+import openpyxl
+from openpyxl.utils.dataframe import dataframe_to_rows
+from datetime import datetime
+import requests
+from io import BytesIO
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import os
 
 # Initialize session state
 if 'pdf_generated' not in st.session_state:
@@ -615,6 +626,131 @@ def merge_pdfs(pdf1_bytes, pdf2_bytes):
     
     return merged_pdf.getvalue()
 
+# Add these functions right after your existing imports and class definitions
+import openpyxl
+from openpyxl.utils.dataframe import dataframe_to_rows
+import os
+
+def load_local_template():
+    """Load template from local file for testing"""
+    template_path = "Payreq 4th Nov 3 inv.xlsx"
+    try:
+        if os.path.exists(template_path):
+            return template_path
+        else:
+            st.error(f"❌ Template file not found: {template_path}")
+            return None
+    except Exception as e:
+        st.error(f"❌ Failed to load template: {str(e)}")
+        return None
+
+def convert_amount_to_words(amount):
+    """Convert amount to words for the AMOUNT IN WORDS field"""
+    return f"Rupees {amount:,.2f} Only"
+
+def prepare_output_data_for_template(invoice_data, selected_company, company_code):
+    """Prepare data in exact template column order"""
+    output_data = []
+    
+    for _, row in invoice_data.iterrows():
+        # Format invoice number exactly as needed
+        invoice_no = f"{row['Serial']}{row['CUSDEC']}{row['Year']}"
+        
+        # Get cost center and assignment based on company
+        cost_center_map = {
+            "BODYLINE PVT LTD": "B051PRCH01",
+            "UNICHELA PVT LTD": "A050COMN01",  # Using A050COMN01 from your template
+            "MAS CAPITAL PVT LTD": "MCAPPRCH01"
+        }
+        cost_center = cost_center_map.get(selected_company, "A050COMN01")
+        assignment = selected_company.upper().replace(' PVT LTD', '')
+        
+        output_data.append({
+            'INV. DATE': row['INV. DATE'],
+            'INVOICE NO': invoice_no,
+            'VENDOR': "0000400554",
+            'GL A/C': row['GL A/C'],
+            'TEXT': "VAT Claimable",
+            'COST CENTER': cost_center,
+            'ASSIGNEMENT': assignment,
+            'F A': row['F A'],
+            'INT.ORDER': '',
+            'N O F': '',
+            'Plant': company_code,
+            'AMOUNT': row['AMOUNT'],
+            'VAT (11%)': 0,
+            'VAT in LKR': 0,
+            'NBT in LKR': 0,
+            'TOTAL': row['AMOUNT'],
+            'Office Code': row['Office Code'],
+            'Year': row['Year'],
+            'Serial': row['Serial'],
+            'CUSDEC': row['CUSDEC']
+        })
+    
+    return pd.DataFrame(output_data)
+
+def fill_payreq_template(output_df, selected_company, company_code):
+    """Simplified version that just overwrites data rows"""
+    
+    # Load local template
+    template_path = load_local_template()
+    if template_path is None:
+        return None
+        
+    wb = openpyxl.load_workbook(template_path)
+    ws = wb.active
+    
+    # Fill basic fields
+    ws['C8'] = company_code
+    ws['C10'] = "0000400554"
+    ws['D54'] = datetime.now().strftime('%d/%m/%Y')
+    
+    # Start writing data from row 19
+    start_row = 25
+    
+    # Write each row of data
+    for i, (_, row_data) in enumerate(output_df.iterrows()):
+        current_row = start_row + i
+        
+        # Write all columns for this row
+        # Corrected column mapping (A=1, B=2, C=3, etc.)
+        columns = [
+            ('INV. DATE', 2),      # B column (was 1)
+            ('INVOICE NO', 3),     # C column (was 2)
+            ('VENDOR', 4),         # D column (was 3)
+            ('GL A/C', 5),         # E column (was 4)
+            ('TEXT', 6),           # F column (was 5)
+            ('COST CENTER', 7),    # G column (was 6)
+            ('ASSIGNEMENT', 8),    # H column (was 7)
+            ('F A', 9),            # I column (was 8)
+            ('INT.ORDER', 10),     # J column (was 9)
+            ('N O F', 11),         # K column (was 10)
+            ('Plant', 12),         # L column (was 11)
+            ('AMOUNT', 13),        # M column (was 12)
+            ('VAT (11%)', 14),     # N column (was 13)
+            ('VAT in LKR', 15),    # O column (was 14)
+            ('NBT in LKR', 16),    # P column (was 15)
+            ('TOTAL', 17),         # Q column (was 16)
+            ('Office Code', 18),   # R column (was 17)
+            ('Year', 19),          # S column (was 18)
+            ('Serial', 20),        # T column (was 19)
+            ('CUSDEC', 21)         # U column (was 20)
+        ]
+        
+        for col_name, col_num in columns:
+            ws.cell(row=current_row, column=col_num, value=row_data[col_name])
+    
+    # Calculate total and update AMOUNT IN WORDS
+    total_amount = output_df['AMOUNT'].sum()
+    ws['C13'] = convert_amount_to_words(total_amount)
+    
+    # Save to bytes
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()
+
 def main():
     st.set_page_config(page_title="CusDec Payment Request Edition", layout="wide")
     
@@ -939,17 +1075,12 @@ def main():
         }
         st.table(preview_data)
 
+
     with tab2:
         st.subheader("PayReq Creation")
         
-        # Upload template Excel file
-        st.write("### Step 1: Upload PayReq Template(Optional)")
-        template_file = st.file_uploader("Upload PayReq Excel Template", type=["xlsx", "xls"])
         
-        if template_file:
-            st.success("Template uploaded successfully!")
-        
-        st.write("### Step 2: Enter Payment Details")
+        st.write("### Step 1: Enter Payment Details")
         
         # Basic information
         col1, col2 = st.columns(2)
@@ -985,7 +1116,7 @@ def main():
                 'CUSDEC_FILE': []  # Store the uploaded file for reference
             })
         
-        st.write("### Step 3: Upload CUSDEC PDFs in Order")
+        st.write("### Step 2: Upload CUSDEC PDFs in Order")
         st.info("💡 **Upload Tip**: Add PDFs in the order you want them merged. For Bodyline, upload CUSDEC first then Assessment Notice.")
 
 
@@ -1066,7 +1197,7 @@ def main():
 
 
 
-        st.write("### Step 4: Review and Edit Invoice Data")
+        st.write("### Step 3: Review and Edit Invoice Data")
         
         if not st.session_state.payreq_invoice_data.empty:
             # Editable dataframe
@@ -1141,140 +1272,238 @@ def main():
                 })
                 st.rerun()
         
-        # Generate final files
-        # Generate final files
+
+
+        # Download Buttons
         if not st.session_state.payreq_invoice_data.empty:
-            st.write("### Step 5: Generate Files")
+            st.write("### Step 4: Download Files")
             
-            col_gen1, col_gen2 = st.columns(2)
+            col_dl1, col_dl2 = st.columns(2)
             
-            def prepare_output_data():
-                output_data = []
-                for _, row in st.session_state.payreq_invoice_data.iterrows():
-                    invoice_no = f"{row['Serial']}{row['CUSDEC']}{row['Year']}" if row['CUSDEC'] else f"{row['Serial']}{row['Year']}"
-                    cost_center_map = {
-                        "BODYLINE PVT LTD": "B050COMN01",
-                        "UNICHELA PVT LTD": "A050COMN01", 
-                        "MAS CAPITAL PVT LTD": "MCAPCOMN01"
-                    }
-                    cost_center = cost_center_map[selected_company]
-                    assignment = selected_company.upper().replace(' PVT LTD', '')
-
-                    output_data.append({
-                        'INV. DATE': row['INV. DATE'],
-                        'INVOICE NO': invoice_no,
-                        'VENDOR': vendor_code,
-                        'GL A/C': row['GL A/C'],
-                        'TEXT': description,
-                        'COST CENTER': cost_center,
-                        'ASSIGNEMENT': assignment,
-                        'F A': row['F A'],
-                        'INT.ORDER': '',
-                        'N O F': '',
-                        'Plant': company_code,
-                        'AMOUNT': f"{row['AMOUNT']:,.2f}",
-                        'VAT (11%)': '0.00',
-                        'VAT in LKR': '0.00',
-                        'NBT in LKR': '0.00',
-                        'TOTAL': f"{row['AMOUNT']:,.2f}",
-                        'Office Code': row['Office Code'],
-                        'Year': row['Year'],
-                        'Serial': row['Serial'],
-                        'CUSDEC': row['CUSDEC']
-                    })
-
-                total_amount = st.session_state.payreq_invoice_data['AMOUNT'].sum()
-                if output_data:
-                    output_data.append({
-                        'INV. DATE': '', 'INVOICE NO': '', 'VENDOR': '', 'GL A/C': '',
-                        'TEXT': '', 'COST CENTER': '', 'ASSIGNEMENT': '', 'F A': '',
-                        'INT.ORDER': '', 'N O F': '', 'Plant': '', 'AMOUNT': f"{total_amount:,.2f}",
-                        'VAT (11%)': '0.00', 'VAT in LKR': '0.00', 'NBT in LKR': '0.00',
-                        'TOTAL': f"{total_amount:,.2f}", 'Office Code': '', 'Year': '',
-                        'Serial': '', 'CUSDEC': ''
-                    })
-
-                df = pd.DataFrame(output_data)
-
-                # Ensure the correct column order
-                column_order = [
-                    'INV. DATE', 'INVOICE NO', 'VENDOR', 'GL A/C', 'TEXT',
-                    'COST CENTER', 'ASSIGNEMENT', 'F A', 'INT.ORDER', 'N O F', 'Plant',
-                    'AMOUNT', 'VAT (11%)', 'VAT in LKR', 'NBT in LKR', 'TOTAL',
-                    'Office Code', 'Year', 'Serial', 'CUSDEC'
-                ]
-                df = df[column_order]
-                return df
-
-            # ---- Excel Only ----
-            with col_gen1:
-                if st.button("Generate PayReq Excel Only", type="primary"):
+            with col_dl1:
+                # PayReq Excel Only - Direct Download
+                excel_data = None
+                excel_filename = None
+                
+                if st.button("📥 Download PayReq Excel Only", type="primary", use_container_width=True):
                     try:
-                        output_df = prepare_output_data()
-                        output = BytesIO()
-                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                            output_df.to_excel(writer, index=False, sheet_name='Payment Requisition')
-
-                        excel_data = output.getvalue()
-                        filename = f"PayReq_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-
-
-                        st.download_button(
-                            label="Download PayReq Excel",
-                            data=excel_data,
-                            file_name=filename,
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        if not selected_company:
+                            st.error("❌ Please select a COMPANY first")
+                            st.stop()
+                            
+                        # Prepare and generate Excel
+                        output_df = prepare_output_data_for_template(
+                            st.session_state.payreq_invoice_data, 
+                            selected_company, 
+                            company_code
                         )
-                        st.success("PayReq Excel generated successfully!")
+                        
+                        excel_data = fill_payreq_template(output_df, selected_company, company_code)
+                        excel_filename = f"PayReq_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                        
+                        st.success("✅ Excel generated successfully!")
+                        
                     except Exception as e:
-                        st.error(f"Error generating Excel: {str(e)}")
+                        st.error(f"❌ Error generating Excel: {str(e)}")
+                
+                # Download button appears only when data is ready
+                if excel_data:
+                    st.download_button(
+                        label="⬇️ Save Excel File Now",
+                        data=excel_data,
+                        file_name=excel_filename,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key="excel_only_download"
+                    )
+            
+            with col_dl2:
+                # PayReq Excel + Merged PDF - Direct Download
+                excel_data_merged = None
+                pdf_data = None
+                excel_filename_merged = None
+                pdf_filename = None
+                
+                if st.button("📥 Download PayReq with Merged PDF", type="secondary", use_container_width=True):
+                    try:
+                        if not selected_company:
+                            st.error("❌ Please select a COMPANY first")
+                            st.stop()
+                            
+                        if 'payreq_cusdec_files' not in st.session_state or not st.session_state.payreq_cusdec_files:
+                            st.error("❌ No CUSDEC PDFs uploaded for merging")
+                            st.stop()
+                        
+                        # Generate Excel
+                        output_df = prepare_output_data_for_template(
+                            st.session_state.payreq_invoice_data, 
+                            selected_company, 
+                            company_code
+                        )
+                        excel_data_merged = fill_payreq_template(output_df, selected_company, company_code)
+                        excel_filename_merged = f"PayReq_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                        
+                        # Merge CUSDEC PDFs
+                        pdf_merger = PyPDF2.PdfMerger()
+                        for cusdec_file in st.session_state.payreq_cusdec_files:
+                            pdf_merger.append(BytesIO(cusdec_file.getvalue()))
+                        
+                        combined_pdf = BytesIO()
+                        pdf_merger.write(combined_pdf)
+                        pdf_merger.close()
+                        pdf_data = combined_pdf.getvalue()
+                        pdf_filename = f"Combined_CUSDEC_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+                        
+                        st.success("✅ Both files generated successfully!")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error generating files: {str(e)}")
+                
+                # Download buttons appear only when data is ready
+                if excel_data_merged and pdf_data:
+                    st.download_button(
+                        label="⬇️ Download Excel File",
+                        data=excel_data_merged,
+                        file_name=excel_filename_merged,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key="excel_merged_download"
+                    )
+                    
+                    st.download_button(
+                        label="⬇️ Download Combined PDF",
+                        data=pdf_data,
+                        file_name=pdf_filename,
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="pdf_merged_download"
+                    )
 
-            # ---- Excel + PDF ----
-            with col_gen2:
-                if st.button("Generate with Merged CUSDEC PDFs", type="secondary"):
-                    if 'payreq_cusdec_files' in st.session_state and st.session_state.payreq_cusdec_files:
-                        try:
-                            # Generate Excel first
-                            output_df = prepare_output_data()
-                            excel_output = BytesIO()
-                            with pd.ExcelWriter(excel_output, engine='openpyxl') as writer:
-                                output_df.to_excel(writer, index=False, sheet_name='Payment Requisition')
-                            excel_data = excel_output.getvalue()
 
-                            # Merge CUSDEC PDFs
-                            pdf_merger = PyPDF2.PdfMerger()
-                            for cusdec_file in st.session_state.payreq_cusdec_files:
-                                pdf_merger.append(BytesIO(cusdec_file.getvalue()))
+        # Email configuration section
+        st.write("### Step 5: Send Email via Outlook")
 
-                            combined_pdf = BytesIO()
-                            pdf_merger.write(combined_pdf)
-                            pdf_merger.close()
-                            combined_pdf_data = combined_pdf.getvalue()
+        with st.form("email_form"):
+            st.write("#### Email Details")
+            
+            # Sender email (you might want to make this configurable)
+            sender_email = st.text_input("Sender Email", "your-email@company.com")
+            
+            # Recipient email
+            recipient_email = st.text_input("Recipient Email*", "")
+            
+            # CC emails (optional)
+            cc_emails = st.text_input("CC Emails (comma separated)", "")
+            
+            # Email subject
+            total_amount = st.session_state.payreq_invoice_data['AMOUNT'].sum()
+            num_invoices = len(st.session_state.payreq_invoice_data)
+            subject = f"VAT Payment - {selected_company} - Total: {total_amount:,.2f} {currency} - {num_invoices} invoices"
+            
+            st.text_input("Subject", value=subject, disabled=True)
+            
+            # Email body
+            email_body = f"""Please check and approve the VAT payment request.
 
-                            # Download buttons
-                            col_dl1, col_dl2 = st.columns(2)
-                            with col_dl1:
-                                excel_filename = f"PayReq_{company_code}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-                                st.download_button(
-                                    label="Download Excel File",
-                                    data=excel_data,
-                                    file_name=excel_filename,
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                )
-                            with col_dl2:
-                                pdf_filename = f"Combined_CUSDEC_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-                                st.download_button(
-                                    label="Download Combined CUSDEC PDF",
-                                    data=combined_pdf_data,
-                                    file_name=pdf_filename,
-                                    mime="application/pdf"
-                                )
+        Number of invoices: {num_invoices}
+        Total amount: {total_amount:,.2f} {currency}
+        Company: {selected_company}
 
-                            st.success("Both Excel and combined PDF generated successfully!")
-                        except Exception as e:
-                            st.error(f"Error generating files: {str(e)}")
-                    else:
-                        st.warning("No CUSDEC PDFs uploaded for merging")
+        This is an automated message from the PayReq System.
+        """
+            
+            st.text_area("Email Body", value=email_body, height=150)
+            
+            # Attachments selection
+            st.write("#### Attachments")
+            attach_excel = st.checkbox("Attach PayReq Excel", value=True)
+            attach_pdf = st.checkbox("Attach Combined CUSDEC PDF", value=True)
+            
+            # SMTP configuration
+            st.write("#### SMTP Configuration")
+            smtp_server = st.text_input("SMTP Server", "smtp.office365.com")
+            smtp_port = st.number_input("SMTP Port", value=587)
+            smtp_username = st.text_input("SMTP Username", sender_email)
+            smtp_password = st.text_input("SMTP Password", type="password")
+            
+            send_email = st.form_submit_button("📧 Send Email", type="primary")
+
+        if send_email:
+            if not recipient_email:
+                st.error("❌ Please enter recipient email address")
+            elif not smtp_password:
+                st.error("❌ Please enter SMTP password")
+            else:
+                try:
+                    # Create message
+                    msg = MIMEMultipart()
+                    msg['From'] = sender_email
+                    msg['To'] = recipient_email
+                    msg['Subject'] = subject
+                    
+                    if cc_emails:
+                        msg['Cc'] = cc_emails
+                    
+                    # Add body to email
+                    msg.attach(MIMEText(email_body, 'plain'))
+                    
+                    # Attach Excel file if requested
+                    if attach_excel and not st.session_state.payreq_invoice_data.empty:
+                        output_df = prepare_output_data_for_template(
+                            st.session_state.payreq_invoice_data, 
+                            selected_company, 
+                            company_code
+                        )
+                        excel_data = fill_payreq_template(output_df, selected_company, company_code)
+                        
+                        part = MIMEBase('application', 'octet-stream')
+                        part.set_payload(excel_data)
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            'Content-Disposition',
+                            f'attachment; filename=PayReq_{selected_company.replace(" ", "_")}.xlsx'
+                        )
+                        msg.attach(part)
+                    
+                    # Attach PDF if requested and available
+                    if attach_pdf and 'payreq_cusdec_files' in st.session_state and st.session_state.payreq_cusdec_files:
+                        pdf_merger = PyPDF2.PdfMerger()
+                        for cusdec_file in st.session_state.payreq_cusdec_files:
+                            pdf_merger.append(BytesIO(cusdec_file.getvalue()))
+                        
+                        combined_pdf = BytesIO()
+                        pdf_merger.write(combined_pdf)
+                        pdf_merger.close()
+                        pdf_data = combined_pdf.getvalue()
+                        
+                        part = MIMEBase('application', 'octet-stream')
+                        part.set_payload(pdf_data)
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            'Content-Disposition',
+                            f'attachment; filename=Combined_CUSDEC_{selected_company.replace(" ", "_")}.pdf'
+                        )
+                        msg.attach(part)
+                    
+                    # Send email
+                    with st.spinner("Sending email..."):
+                        server = smtplib.SMTP(smtp_server, smtp_port)
+                        server.starttls()
+                        server.login(smtp_username, smtp_password)
+                        
+                        # Combine To and CC recipients
+                        all_recipients = [recipient_email]
+                        if cc_emails:
+                            all_recipients.extend([email.strip() for email in cc_emails.split(',')])
+                        
+                        text = msg.as_string()
+                        server.sendmail(sender_email, all_recipients, text)
+                        server.quit()
+                    
+                    st.success("✅ Email sent successfully!")
+                    
+                except Exception as e:
+                    st.error(f"❌ Failed to send email: {str(e)}")
 
     with tab3:
         st.header("📚 Help & Standard Operating Procedure")
@@ -1526,3 +1755,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
