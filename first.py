@@ -635,7 +635,7 @@ def load_local_template():
     """Load template from GitHub for cloud deployment"""
     try:
         # GitHub raw URL for the template
-        github_raw_url = "https://github.com/masintimatesimports/payment-request-app/blob/90cbca14a4ce7b17732f67b714574891d727966d/Payreq%204th%20Nov%203%20inv.xlsx"
+        github_raw_url = "https://raw.githubusercontent.com/masintimatesimports/payment-request-app/90cbca14a4ce7b17732f67b714574891d727966d/Payreq%204th%20Nov%203%20inv.xlsx"
         
         # Download template from GitHub
         response = requests.get(github_raw_url)
@@ -1759,6 +1759,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
