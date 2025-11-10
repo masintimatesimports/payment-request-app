@@ -632,16 +632,20 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 import os
 
 def load_local_template():
-    """Load template from local file for testing"""
-    template_path = "Payreq 4th Nov 3 inv.xlsx"
+    """Load template from GitHub for cloud deployment"""
     try:
-        if os.path.exists(template_path):
-            return template_path
-        else:
-            st.error(f"❌ Template file not found: {template_path}")
-            return None
+        # GitHub raw URL for the template
+        github_raw_url = "https://raw.githubusercontent.com/yourusername/your-repo/main/Payreq%204th%20Nov%203%20inv.xlsx"
+        
+        # Download template from GitHub
+        response = requests.get(github_raw_url)
+        response.raise_for_status()
+        
+        # Return as BytesIO object
+        return BytesIO(response.content)
+        
     except Exception as e:
-        st.error(f"❌ Failed to load template: {str(e)}")
+        st.error(f"❌ Failed to load template from GitHub: {str(e)}")
         return None
 
 def convert_amount_to_words(amount):
@@ -1755,6 +1759,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
