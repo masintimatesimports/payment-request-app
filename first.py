@@ -20,6 +20,8 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 import os
+import zipfile  # Add this import
+
 
 # Initialize session state
 if 'pdf_generated' not in st.session_state:
@@ -144,10 +146,10 @@ def extract_company_name_from_consignee(lines: List[str]) -> str:
     """
     # Known company mappings
     company_mappings = {
-        "MAS CAPITAL PVT LTD": "MAS CAPITAL PVT LTD",
+        "MAS CAPITAL PVT LTD": "MAS CAPITAL/INTIMATES",  # Changed here
         "BODYLINE PVT LTD": "BODYLINE PVT LTD", 
         "UNICHELA PVT LTD": "UNICHELA PVT LTD",
-        "MAS CAPITAL": "MAS CAPITAL PVT LTD",
+        "MAS CAPITAL": "MAS CAPITAL/INTIMATES",  # Changed here
         "BODYLINE": "BODYLINE PVT LTD",
         "UNICHELA": "UNICHELA PVT LTD"
     }
@@ -522,7 +524,7 @@ def create_payment_request_pdf(data):
     
     # Company Name and Currency
     pdf.cell(45, 10, 'Company Name', 0, 0)
-    pdf.set_font('Arial', 'B', 12)
+    pdf.set_font('Arial', 'B', 10)
     pdf.cell(45, 10, data['company_name'], 0, 0)
     pdf.set_font('Arial', '', 12)
     pdf.cell(35, 10, 'Currency :', 0, 0)
@@ -631,14 +633,20 @@ import openpyxl
 from openpyxl.utils.dataframe import dataframe_to_rows
 import os
 
-def load_local_template():
+def load_local_template(selected_company=""):
     """Load template from GitHub for cloud deployment"""
     try:
-        # GitHub raw URL for the template
-        github_raw_url = "https://raw.githubusercontent.com/masintimatesimports/payment-request-app/90cbca14a4ce7b17732f67b714574891d727966d/Payreq%204th%20Nov%203%20inv.xlsx"
+        # GitHub raw URLs for templates
+        github_urls = {
+            "UNICHELA PVT LTD": "https://raw.githubusercontent.com/masintimatesimports/payment-request-app/cedbf2c69e31e9c3ddc2523da815ca755e27f7ab/PayReq_Template_unichela.xlsx",
+            "DEFAULT": "https://raw.githubusercontent.com/masintimatesimports/payment-request-app/90cbca14a4ce7b17732f67b714574891d727966d/Payreq%204th%20Nov%203%20inv.xlsx"
+        }
+        
+        # Determine which template to use
+        template_url = github_urls.get(selected_company, github_urls["DEFAULT"])
         
         # Download template from GitHub
-        response = requests.get(github_raw_url)
+        response = requests.get(template_url)
         response.raise_for_status()
         
         # Return as BytesIO object
@@ -652,47 +660,55 @@ def convert_amount_to_words(amount):
     """Convert amount to words for the AMOUNT IN WORDS field"""
     return f"Rupees {amount:,.2f} Only"
 
+
 def prepare_output_data_for_template(invoice_data, selected_company, company_code):
     """Prepare data in exact template column order"""
-    output_data = []
     
-    for _, row in invoice_data.iterrows():
-        # Format invoice number exactly as needed
-        invoice_no = f"{row['Serial']}{row['CUSDEC']}{row['Year']}"
+    # For Unichela, we'll use a different format
+    if selected_company == "UNICHELA PVT LTD":
+        # Return the dataframe as-is, the template filling function will handle it
+        return invoice_data
+    else:
+        # Original logic for other companies
+        output_data = []
         
-        # Get cost center and assignment based on company
-        cost_center_map = {
-            "BODYLINE PVT LTD": "B051PRCH01",
-            "UNICHELA PVT LTD": "A050COMN01",  # Using A050COMN01 from your template
-            "MAS CAPITAL PVT LTD": "MCAPPRCH01"
-        }
-        cost_center = cost_center_map.get(selected_company, "A050COMN01")
-        assignment = selected_company.upper().replace(' PVT LTD', '')
+        for _, row in invoice_data.iterrows():
+            # Format invoice number exactly as needed
+            invoice_no = f"{row['Serial']}{row['CUSDEC']}{row['Year']}"
+            
+            # Get cost center and assignment based on company
+            cost_center_map = {
+                "BODYLINE PVT LTD": "B051PRCH01",
+                "UNICHELA PVT LTD": "A050COMN01",
+                "MAS CAPITAL PVT LTD": "MCAPPRCH01"
+            }
+            cost_center = cost_center_map.get(selected_company, "A050COMN01")
+            assignment = selected_company.upper().replace(' PVT LTD', '')
+            
+            output_data.append({
+                'INV. DATE': row['INV. DATE'],
+                'INVOICE NO': invoice_no,
+                'VENDOR': "0000400554",
+                'GL A/C': row['GL A/C'],
+                'TEXT': "VAT Claimable",
+                'COST CENTER': cost_center,
+                'ASSIGNEMENT': assignment,
+                'F A': row['F A'],
+                'INT.ORDER': '',
+                'N O F': '',
+                'Plant': company_code,
+                'AMOUNT': row['AMOUNT'],
+                'VAT (11%)': 0,
+                'VAT in LKR': 0,
+                'NBT in LKR': 0,
+                'TOTAL': row['AMOUNT'],
+                'Office Code': row['Office Code'],
+                'Year': row['Year'],
+                'Serial': row['Serial'],
+                'CUSDEC': row['CUSDEC']
+            })
         
-        output_data.append({
-            'INV. DATE': row['INV. DATE'],
-            'INVOICE NO': invoice_no,
-            'VENDOR': "0000400554",
-            'GL A/C': row['GL A/C'],
-            'TEXT': "VAT Claimable",
-            'COST CENTER': cost_center,
-            'ASSIGNEMENT': assignment,
-            'F A': row['F A'],
-            'INT.ORDER': '',
-            'N O F': '',
-            'Plant': company_code,
-            'AMOUNT': row['AMOUNT'],
-            'VAT (11%)': 0,
-            'VAT in LKR': 0,
-            'NBT in LKR': 0,
-            'TOTAL': row['AMOUNT'],
-            'Office Code': row['Office Code'],
-            'Year': row['Year'],
-            'Serial': row['Serial'],
-            'CUSDEC': row['CUSDEC']
-        })
-    
-    return pd.DataFrame(output_data)
+        return pd.DataFrame(output_data)
 
 def fill_payreq_template(output_df, selected_company, company_code):
     """Simplified version that just overwrites data rows"""
@@ -748,6 +764,210 @@ def fill_payreq_template(output_df, selected_company, company_code):
     # Calculate total and update AMOUNT IN WORDS
     total_amount = output_df['AMOUNT'].sum()
     ws['C13'] = convert_amount_to_words(total_amount)
+    
+    # Save to bytes
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()
+def fill_unichela_template(output_df, selected_company, company_code):
+    """Fill the Unichela-specific template"""
+    
+    # Load Unichela template
+    template_path = load_local_template(selected_company)
+    if template_path is None:
+        return None
+        
+    wb = openpyxl.load_workbook(template_path)
+    ws = wb.active
+    
+    # Check if the worksheet has merged cells
+    if ws.merged_cells.ranges:
+        # Store merged cell ranges
+        merged_ranges = list(ws.merged_cells.ranges)
+        
+        # Unmerge all cells first
+        for merged_range in merged_ranges:
+            ws.unmerge_cells(str(merged_range))
+    
+    # Fill header information
+    # System
+    cell = ws['B1']
+    if isinstance(cell, openpyxl.cell.cell.MergedCell):
+        # Find the top-left cell of the merged range
+        for range_str in merged_ranges:
+            if cell.coordinate in ws[range_str]:
+                top_left_cell = ws[range_str][0][0]
+                top_left_cell.value = "PDM"
+                break
+    else:
+        ws['B1'] = "PDM"  # System
+    
+    # CompanyCode
+    cell = ws['B2']
+    if isinstance(cell, openpyxl.cell.cell.MergedCell):
+        for range_str in merged_ranges:
+            if cell.coordinate in ws[range_str]:
+                top_left_cell = ws[range_str][0][0]
+                top_left_cell.value = company_code  # A050
+                break
+    else:
+        ws['B2'] = company_code   # CompanyCode (A050)
+    
+    # VendorCode
+    cell = ws['B3']
+    if isinstance(cell, openpyxl.cell.cell.MergedCell):
+        for range_str in merged_ranges:
+            if cell.coordinate in ws[range_str]:
+                top_left_cell = ws[range_str][0][0]
+                top_left_cell.value = "0000400554"
+                break
+    else:
+        ws['B3'] = "0000400554"   # VendorCode
+    
+    # VendorName
+    cell = ws['B4']
+    if isinstance(cell, openpyxl.cell.cell.MergedCell):
+        for range_str in merged_ranges:
+            if cell.coordinate in ws[range_str]:
+                top_left_cell = ws[range_str][0][0]
+                top_left_cell.value = "Director General of Customs"
+                break
+    else:
+        ws['B4'] = "Director General of Customs"  # VendorName
+    
+    # UserEmail
+    cell = ws['B5']
+    if isinstance(cell, openpyxl.cell.cell.MergedCell):
+        for range_str in merged_ranges:
+            if cell.coordinate in ws[range_str]:
+                top_left_cell = ws[range_str][0][0]
+                top_left_cell.value = "chamithwi@masholdings.com"
+                break
+    else:
+        ws['B5'] = "chamithwi@masholdings.com"   # UserEmail
+    
+    # Start writing data from row 10 (assuming data starts here)
+    start_row = 7
+    
+    # Write each row of data
+    for i, (_, row_data) in enumerate(output_df.iterrows()):
+        current_row = start_row + i
+        
+        # Create invoice number format
+        invoice_no = f"{row_data['Serial']}{row_data['CUSDEC']}{row_data['Year']}"
+        
+        # Get cost center and assignment
+        cost_center_map = {
+            "BODYLINE PVT LTD": "B051PRCH01",
+            "UNICHELA PVT LTD": "A050COMN01",
+            "MAS CAPITAL PVT LTD": "MCAPPRCH01"
+        }
+        cost_center = cost_center_map.get(selected_company, "A050COMN01")
+        assignment = selected_company.upper().replace(' PVT LTD', '')
+        
+        # Fill the row data
+        # Check each cell for merged status before writing
+        
+        # Column A: InvoiceDate
+        cell = ws.cell(row=current_row, column=1)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = row_data['INV. DATE']
+        
+        # Column B: InvoiceNo
+        cell = ws.cell(row=current_row, column=2)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = invoice_no
+        
+        # Column C: CompanyCode
+        cell = ws.cell(row=current_row, column=3)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = company_code
+        
+        # Column D: Vendor
+        cell = ws.cell(row=current_row, column=4)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = "0000400554"
+        
+        # Column E: GL A/C
+        cell = ws.cell(row=current_row, column=5)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = row_data['GL A/C']
+        
+        # Column F: Text
+        cell = ws.cell(row=current_row, column=6)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = "VAT Claimable"
+        
+        # Column G: CostCenter
+        cell = ws.cell(row=current_row, column=7)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = cost_center
+        
+        # Column H: Assignment
+        cell = ws.cell(row=current_row, column=8)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = assignment
+        
+        # Column I: FunctionalArea
+        cell = ws.cell(row=current_row, column=9)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = row_data['F A']
+        
+        # Column J: InternalOrder
+        cell = ws.cell(row=current_row, column=10)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = ""
+        
+        # Column K: N O F
+        cell = ws.cell(row=current_row, column=11)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = ""
+        
+        # Column L: Plant
+        cell = ws.cell(row=current_row, column=12)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = company_code
+        
+        # Column M: ProfitCenter
+        cell = ws.cell(row=current_row, column=13)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = ""
+        
+        # Column N: Amount
+        cell = ws.cell(row=current_row, column=14)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = row_data['AMOUNT']
+        
+        # Column O: Currency
+        cell = ws.cell(row=current_row, column=15)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = "LKR"
+        
+        # Column P: VAT (11%)
+        cell = ws.cell(row=current_row, column=16)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = 0
+        
+        # Column Q: VAT in LKR
+        cell = ws.cell(row=current_row, column=17)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = 0
+        
+        # Column R: NBT in LKR
+        cell = ws.cell(row=current_row, column=18)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = 0
+        
+        # Column S: Total
+        cell = ws.cell(row=current_row, column=19)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = row_data['AMOUNT']
+        
+        # Column T: AttachmentName
+        cell = ws.cell(row=current_row, column=20)
+        if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+            cell.value = invoice_no
     
     # Save to bytes
     output = BytesIO()
@@ -821,10 +1041,18 @@ def main():
         with col1:
 
             st.subheader("Essential Information")
-            company_options = ["", "BODYLINE PVT LTD", "UNICHELA PVT LTD", "MAS CAPITAL PVT LTD"]
-
+            company_options = ["", "BODYLINE PVT LTD", "UNICHELA PVT LTD", "MAS CAPITAL/INTIMATES"]
+            
             # Cloud-safe company selection
             company_name_value = st.session_state.extracted_data.get('company_name', '')
+            
+            # Map extracted MAS CAPITAL PVT LTD to MAS CAPITAL/INTIMATES
+            if "MAS CAPITAL" in company_name_value.upper():
+                company_name_value = "MAS CAPITAL/INTIMATES"
+            elif "BODYLINE" in company_name_value.upper():
+                company_name_value = "BODYLINE PVT LTD"
+            elif "UNICHELA" in company_name_value.upper():
+                company_name_value = "UNICHELA PVT LTD"
             company_index = company_options.index(company_name_value) if company_name_value in company_options else 0
             company_name = st.selectbox("Company Name *", company_options, index=company_index)
 
@@ -966,7 +1194,7 @@ def main():
         company_code_map = {
             "BODYLINE PVT LTD": "BPL",
             "UNICHELA PVT LTD": "UPL", 
-            "MAS CAPITAL PVT LTD": "MCPL"
+            "MAS CAPITAL/INTIMATES": "MCPL"  # Changed here
         }
 
         company_code = company_code_map.get(company_name, "PRF")
@@ -1302,7 +1530,12 @@ def main():
                             company_code
                         )
                         
-                        excel_data = fill_payreq_template(output_df, selected_company, company_code)
+                        # Use different template filling function for Unichela
+                        if selected_company == "UNICHELA PVT LTD":
+                            excel_data = fill_unichela_template(output_df, selected_company, company_code)
+                        else:
+                            excel_data = fill_payreq_template(output_df, selected_company, company_code)
+                            
                         excel_filename = f"PayReq_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
                         
                         st.success("✅ Excel generated successfully!")
@@ -1322,68 +1555,172 @@ def main():
                     )
             
             with col_dl2:
-                # PayReq Excel + Merged PDF - Direct Download
+                # PayReq Excel + PDF handling - Different logic for Unichela vs others
                 excel_data_merged = None
                 pdf_data = None
                 excel_filename_merged = None
                 pdf_filename = None
+                zip_data = None
+                zip_filename = None
                 
-                if st.button("📥 Download PayReq with Merged PDF", type="secondary", use_container_width=True):
+                # Change button text based on company
+                button_text = "📥 Download PayReq with Merged PDF"
+                if selected_company == "UNICHELA PVT LTD":
+                    button_text = "📥 Download PayReq with Individual PDFs"
+                
+                if st.button(button_text, type="secondary", use_container_width=True):
                     try:
                         if not selected_company:
                             st.error("❌ Please select a COMPANY first")
                             st.stop()
                             
                         if 'payreq_cusdec_files' not in st.session_state or not st.session_state.payreq_cusdec_files:
-                            st.error("❌ No CUSDEC PDFs uploaded for merging")
+                            st.error("❌ No CUSDEC PDFs uploaded")
                             st.stop()
                         
-                        # Generate Excel
+                        # Generate Excel (common for all companies)
+                        # Generate Excel (common for all companies)
                         output_df = prepare_output_data_for_template(
                             st.session_state.payreq_invoice_data, 
                             selected_company, 
                             company_code
                         )
-                        excel_data_merged = fill_payreq_template(output_df, selected_company, company_code)
+
+                        # Use different template for Unichela
+                        if selected_company == "UNICHELA PVT LTD":
+                            excel_data_merged = fill_unichela_template(output_df, selected_company, company_code)
+                        else:
+                            excel_data_merged = fill_payreq_template(output_df, selected_company, company_code)
+                            
                         excel_filename_merged = f"PayReq_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                        # ========================================================
+                        # DIFFERENT LOGIC FOR UNICHELA VS OTHER COMPANIES
+                        # ========================================================
                         
-                        # Merge CUSDEC PDFs
-                        pdf_merger = PyPDF2.PdfMerger()
-                        for cusdec_file in st.session_state.payreq_cusdec_files:
-                            pdf_merger.append(BytesIO(cusdec_file.getvalue()))
-                        
-                        combined_pdf = BytesIO()
-                        pdf_merger.write(combined_pdf)
-                        pdf_merger.close()
-                        pdf_data = combined_pdf.getvalue()
-                        pdf_filename = f"Combined_CUSDEC_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-                        
-                        st.success("✅ Both files generated successfully!")
+                        if selected_company == "UNICHELA PVT LTD":
+                            # ========================================================
+                            # UNICHELA: Create ZIP with individual PDFs
+                            # ========================================================
+                            
+                            # Create zip file in memory
+                            zip_buffer = BytesIO()
+                            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                                # 1. Add Excel file to zip
+                                zip_file.writestr(excel_filename_merged, excel_data_merged)
+                                
+                                # 2. Add individual PDFs with invoice number naming
+                                for cusdec_file in st.session_state.payreq_cusdec_files:
+                                    # Find corresponding invoice number from dataframe
+                                    pdf_name = cusdec_file.name
+                                    
+                                    # Look for matching entry in invoice data
+                                    matching_row = None
+                                    for _, row in st.session_state.payreq_invoice_data.iterrows():
+                                        if row['CUSDEC_FILE'] == pdf_name:
+                                            matching_row = row
+                                            break
+                                    
+                                    if matching_row is not None and matching_row['CUSDEC']:
+                                        # Create invoice number format: {Serial}{CUSDEC}{Year}
+                                        invoice_no = f"{matching_row['Serial']}{matching_row['CUSDEC']}{matching_row['Year']}"
+                                        pdf_filename = f"{invoice_no}.pdf"
+                                    else:
+                                        # Fallback: use original filename if no match
+                                        pdf_filename = pdf_name
+                                        st.warning(f"⚠️ Using original filename for: {pdf_name}")
+                                    
+                                    # Add PDF to zip with proper naming
+                                    zip_file.writestr(pdf_filename, cusdec_file.getvalue())
+                            
+                            # Prepare zip for download
+                            zip_buffer.seek(0)
+                            zip_data = zip_buffer.getvalue()
+                            zip_filename = f"PayReq_Unichela_{datetime.now().strftime('%Y%m%d_%H%M')}.zip"
+                            
+                            st.success(f"✅ Zip file created with Excel + {len(st.session_state.payreq_cusdec_files)} individual PDFs!")
+                            
+                        else:
+                            # ========================================================
+                            # OTHER COMPANIES: Merge PDFs as before
+                            # ========================================================
+                            
+                            # Merge CUSDEC PDFs
+                            pdf_merger = PyPDF2.PdfMerger()
+                            for cusdec_file in st.session_state.payreq_cusdec_files:
+                                pdf_merger.append(BytesIO(cusdec_file.getvalue()))
+                            
+                            combined_pdf = BytesIO()
+                            pdf_merger.write(combined_pdf)
+                            pdf_merger.close()
+                            pdf_data = combined_pdf.getvalue()
+                            pdf_filename = f"Combined_CUSDEC_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+                            
+                            st.success("✅ Both files generated successfully!")
                             
                     except Exception as e:
                         st.error(f"❌ Error generating files: {str(e)}")
                 
-                # Download buttons appear only when data is ready
-                if excel_data_merged and pdf_data:
-                    st.download_button(
-                        label="⬇️ Download Excel File",
-                        data=excel_data_merged,
-                        file_name=excel_filename_merged,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
-                        key="excel_merged_download"
-                    )
-                    
-                    st.download_button(
-                        label="⬇️ Download Combined PDF",
-                        data=pdf_data,
-                        file_name=pdf_filename,
-                        mime="application/pdf",
-                        use_container_width=True,
-                        key="pdf_merged_download"
-                    )
-
-
+                # ========================================================
+                # DISPLAY DIFFERENT DOWNLOAD BUTTONS BASED ON COMPANY
+                # ========================================================
+                
+                if selected_company == "UNICHELA PVT LTD":
+                    # UNICHELA: Show ZIP download button
+                    if zip_data:
+                        st.download_button(
+                            label="⬇️ Download Zip (Excel + Individual PDFs)",
+                            data=zip_data,
+                            file_name=zip_filename,
+                            mime="application/zip",
+                            use_container_width=True,
+                            key="unichela_zip_download"
+                        )
+                        
+                        # Optional: Show individual PDF downloads in an expander
+                        with st.expander("📄 Download Individual PDFs"):
+                            for cusdec_file in st.session_state.payreq_cusdec_files:
+                                # Find corresponding invoice number
+                                pdf_name = cusdec_file.name
+                                matching_row = None
+                                for _, row in st.session_state.payreq_invoice_data.iterrows():
+                                    if row['CUSDEC_FILE'] == pdf_name:
+                                        matching_row = row
+                                        break
+                                
+                                if matching_row is not None and matching_row['CUSDEC']:
+                                    invoice_no = f"{matching_row['Serial']}{matching_row['CUSDEC']}{matching_row['Year']}"
+                                    pdf_filename = f"{invoice_no}.pdf"
+                                else:
+                                    pdf_filename = pdf_name
+                                
+                                st.download_button(
+                                    label=f"📄 {pdf_filename}",
+                                    data=cusdec_file.getvalue(),
+                                    file_name=pdf_filename,
+                                    mime="application/pdf",
+                                    use_container_width=True,
+                                    key=f"indiv_{pdf_filename}"
+                                )
+                else:
+                    # OTHER COMPANIES: Show separate Excel and merged PDF buttons
+                    if excel_data_merged and pdf_data:
+                        st.download_button(
+                            label="⬇️ Download Excel File",
+                            data=excel_data_merged,
+                            file_name=excel_filename_merged,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="excel_merged_download"
+                        )
+                        
+                        st.download_button(
+                            label="⬇️ Download Combined PDF",
+                            data=pdf_data,
+                            file_name=pdf_filename,
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key="pdf_merged_download"
+                        )
         # Email configuration section
         st.write("### Step 5: Send Email via Outlook")
 
@@ -1759,7 +2096,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
