@@ -636,9 +636,10 @@ import os
 def load_local_template(selected_company=""):
     """Load template from GitHub for cloud deployment"""
     try:
-        # GitHub raw URLs for templates
+        # GitHub raw URLs for templates - Unichela template for both Unichela and Bodyline
         github_urls = {
             "UNICHELA PVT LTD": "https://raw.githubusercontent.com/masintimatesimports/payment-request-app/cedbf2c69e31e9c3ddc2523da815ca755e27f7ab/PayReq_Template_unichela.xlsx",
+            "BODYLINE PVT LTD": "https://raw.githubusercontent.com/masintimatesimports/payment-request-app/cedbf2c69e31e9c3ddc2523da815ca755e27f7ab/PayReq_Template_unichela.xlsx",  # Changed to Unichela template
             "DEFAULT": "https://raw.githubusercontent.com/masintimatesimports/payment-request-app/90cbca14a4ce7b17732f67b714574891d727966d/Payreq%204th%20Nov%203%20inv.xlsx"
         }
         
@@ -665,7 +666,7 @@ def prepare_output_data_for_template(invoice_data, selected_company, company_cod
     """Prepare data in exact template column order"""
     
     # For Unichela, we'll use a different format
-    if selected_company == "UNICHELA PVT LTD":
+    if selected_company in ["UNICHELA PVT LTD", "BODYLINE PVT LTD"]:
         # Return the dataframe as-is, the template filling function will handle it
         return invoice_data
     else:
@@ -770,10 +771,11 @@ def fill_payreq_template(output_df, selected_company, company_code):
     wb.save(output)
     output.seek(0)
     return output.getvalue()
+
 def fill_unichela_template(output_df, selected_company, company_code):
-    """Fill the Unichela-specific template"""
+    """Fill the Unichela template for both Unichela and Bodyline"""
     
-    # Load Unichela template
+    # Load Unichela template (now used for both companies)
     template_path = load_local_template(selected_company)
     if template_path is None:
         return None
@@ -790,7 +792,12 @@ def fill_unichela_template(output_df, selected_company, company_code):
         for merged_range in merged_ranges:
             ws.unmerge_cells(str(merged_range))
     
-    # Fill header information
+    # Fill header information - Different company codes
+    if selected_company == "BODYLINE PVT LTD":
+        company_code_for_template = "B050"  # Bodyline company code
+    else:
+        company_code_for_template = company_code  # Unichela company code
+    
     # System
     cell = ws['B1']
     if isinstance(cell, openpyxl.cell.cell.MergedCell):
@@ -803,16 +810,16 @@ def fill_unichela_template(output_df, selected_company, company_code):
     else:
         ws['B1'] = "PDM"  # System
     
-    # CompanyCode
+    # CompanyCode - Use appropriate code based on company
     cell = ws['B2']
     if isinstance(cell, openpyxl.cell.cell.MergedCell):
         for range_str in merged_ranges:
             if cell.coordinate in ws[range_str]:
                 top_left_cell = ws[range_str][0][0]
-                top_left_cell.value = company_code  # A050
+                top_left_cell.value = company_code_for_template
                 break
     else:
-        ws['B2'] = company_code   # CompanyCode (A050)
+        ws['B2'] = company_code_for_template   # CompanyCode
     
     # VendorCode
     cell = ws['B3']
@@ -847,8 +854,25 @@ def fill_unichela_template(output_df, selected_company, company_code):
     else:
         ws['B5'] = "chamithwi@masholdings.com"   # UserEmail
     
-    # Start writing data from row 10 (assuming data starts here)
+    # Start writing data from row 7
     start_row = 7
+    
+    # Cost center mapping for both companies
+    cost_center_map = {
+        "BODYLINE PVT LTD": "B051PRCH01",  # Bodyline cost center
+        "UNICHELA PVT LTD": "A050COMN01",   # Unichela cost center
+        "MAS CAPITAL PVT LTD": "MCAPPRCH01"
+    }
+    
+    # Assignment mapping
+    assignment_map = {
+        "BODYLINE PVT LTD": "BODYLINE",
+        "UNICHELA PVT LTD": "UNICHELA",
+        "MAS CAPITAL PVT LTD": "MAS CAPITAL"
+    }
+    
+    cost_center = cost_center_map.get(selected_company, "A050COMN01")
+    assignment = assignment_map.get(selected_company, selected_company.upper().replace(' PVT LTD', ''))
     
     # Write each row of data
     for i, (_, row_data) in enumerate(output_df.iterrows()):
@@ -857,18 +881,7 @@ def fill_unichela_template(output_df, selected_company, company_code):
         # Create invoice number format
         invoice_no = f"{row_data['Serial']}{row_data['CUSDEC']}{row_data['Year']}"
         
-        # Get cost center and assignment
-        cost_center_map = {
-            "BODYLINE PVT LTD": "B051PRCH01",
-            "UNICHELA PVT LTD": "A050COMN01",
-            "MAS CAPITAL PVT LTD": "MCAPPRCH01"
-        }
-        cost_center = cost_center_map.get(selected_company, "A050COMN01")
-        assignment = selected_company.upper().replace(' PVT LTD', '')
-        
         # Fill the row data
-        # Check each cell for merged status before writing
-        
         # Column A: InvoiceDate
         cell = ws.cell(row=current_row, column=1)
         if not isinstance(cell, openpyxl.cell.cell.MergedCell):
@@ -882,7 +895,7 @@ def fill_unichela_template(output_df, selected_company, company_code):
         # Column C: CompanyCode
         cell = ws.cell(row=current_row, column=3)
         if not isinstance(cell, openpyxl.cell.cell.MergedCell):
-            cell.value = company_code
+            cell.value = company_code_for_template
         
         # Column D: Vendor
         cell = ws.cell(row=current_row, column=4)
@@ -927,7 +940,7 @@ def fill_unichela_template(output_df, selected_company, company_code):
         # Column L: Plant
         cell = ws.cell(row=current_row, column=12)
         if not isinstance(cell, openpyxl.cell.cell.MergedCell):
-            cell.value = company_code
+            cell.value = company_code_for_template
         
         # Column M: ProfitCenter
         cell = ws.cell(row=current_row, column=13)
@@ -1507,6 +1520,7 @@ def main():
 
 
         # Download Buttons
+        
         if not st.session_state.payreq_invoice_data.empty:
             st.write("### Step 4: Download Files")
             
@@ -1531,7 +1545,7 @@ def main():
                         )
                         
                         # Use different template filling function for Unichela
-                        if selected_company == "UNICHELA PVT LTD":
+                        if selected_company in ["UNICHELA PVT LTD", "BODYLINE PVT LTD"]:
                             excel_data = fill_unichela_template(output_df, selected_company, company_code)
                         else:
                             excel_data = fill_payreq_template(output_df, selected_company, company_code)
@@ -1565,7 +1579,7 @@ def main():
                 
                 # Change button text based on company
                 button_text = "📥 Download PayReq with Merged PDF"
-                if selected_company == "UNICHELA PVT LTD":
+                if selected_company in ["UNICHELA PVT LTD", "BODYLINE PVT LTD"]:
                     button_text = "📥 Download PayReq with Individual PDFs"
                 
                 if st.button(button_text, type="secondary", use_container_width=True):
@@ -1579,7 +1593,6 @@ def main():
                             st.stop()
                         
                         # Generate Excel (common for all companies)
-                        # Generate Excel (common for all companies)
                         output_df = prepare_output_data_for_template(
                             st.session_state.payreq_invoice_data, 
                             selected_company, 
@@ -1587,19 +1600,20 @@ def main():
                         )
 
                         # Use different template for Unichela
-                        if selected_company == "UNICHELA PVT LTD":
+                        if selected_company in ["UNICHELA PVT LTD", "BODYLINE PVT LTD"]:
                             excel_data_merged = fill_unichela_template(output_df, selected_company, company_code)
                         else:
                             excel_data_merged = fill_payreq_template(output_df, selected_company, company_code)
                             
                         excel_filename_merged = f"PayReq_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                        
                         # ========================================================
-                        # DIFFERENT LOGIC FOR UNICHELA VS OTHER COMPANIES
+                        # ⬇️ ADD THE UPDATED ZIP LOGIC HERE ⬇️
                         # ========================================================
                         
-                        if selected_company == "UNICHELA PVT LTD":
+                        if selected_company in ["UNICHELA PVT LTD", "BODYLINE PVT LTD"]:
                             # ========================================================
-                            # UNICHELA: Create ZIP with individual PDFs
+                            # UNICHELA & BODYLINE: Create ZIP with individual PDFs
                             # ========================================================
                             
                             # Create zip file in memory
@@ -1635,7 +1649,7 @@ def main():
                             # Prepare zip for download
                             zip_buffer.seek(0)
                             zip_data = zip_buffer.getvalue()
-                            zip_filename = f"PayReq_Unichela_{datetime.now().strftime('%Y%m%d_%H%M')}.zip"
+                            zip_filename = f"PayReq_{selected_company.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.zip"
                             
                             st.success(f"✅ Zip file created with Excel + {len(st.session_state.payreq_cusdec_files)} individual PDFs!")
                             
@@ -1661,11 +1675,11 @@ def main():
                         st.error(f"❌ Error generating files: {str(e)}")
                 
                 # ========================================================
-                # DISPLAY DIFFERENT DOWNLOAD BUTTONS BASED ON COMPANY
+                # ⬇️ ALSO UPDATE THE DOWNLOAD BUTTONS SECTION BELOW ⬇️
                 # ========================================================
                 
-                if selected_company == "UNICHELA PVT LTD":
-                    # UNICHELA: Show ZIP download button
+                if selected_company in ["UNICHELA PVT LTD", "BODYLINE PVT LTD"]:
+                    # UNICHELA & BODYLINE: Show ZIP download button
                     if zip_data:
                         st.download_button(
                             label="⬇️ Download Zip (Excel + Individual PDFs)",
@@ -1673,7 +1687,7 @@ def main():
                             file_name=zip_filename,
                             mime="application/zip",
                             use_container_width=True,
-                            key="unichela_zip_download"
+                            key="unichela_bodyline_zip_download"
                         )
                         
                         # Optional: Show individual PDF downloads in an expander
@@ -1721,8 +1735,6 @@ def main():
                             use_container_width=True,
                             key="pdf_merged_download"
                         )
-        # Email configuration section
-        st.write("### Step 5: Send Email via Outlook")
 
         with st.form("email_form"):
             st.write("#### Email Details")
@@ -1795,8 +1807,12 @@ def main():
                             selected_company, 
                             company_code
                         )
-                        excel_data = fill_payreq_template(output_df, selected_company, company_code)
-                        
+
+                        if selected_company in ["UNICHELA PVT LTD", "BODYLINE PVT LTD"]:
+                            excel_data = fill_unichela_template(output_df, selected_company, company_code)
+                        else:
+                            excel_data = fill_payreq_template(output_df, selected_company, company_code)   
+                                                 
                         part = MIMEBase('application', 'octet-stream')
                         part.set_payload(excel_data)
                         encoders.encode_base64(part)
